@@ -1,0 +1,18 @@
+
+int a, b, c;
+a := 5;
+b := 10;
+c := a + b;
+c;
+
+if c > 10 then {
+    int d;
+    d := 20;
+    c := c + d;
+    c;
+};
+
+while a < 8 do {
+    a := a + 1;
+    a; 
+};

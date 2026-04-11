@@ -1,0 +1,12 @@
+# Rust 编译生成的文件
+/target/
+**/*.rs.bk
+
+# IDE 配置
+/.idea/
+.vscode/
+*.swp
+*~
+
+# lalrpop 生成的解析器文件
+**/grammar.rs
