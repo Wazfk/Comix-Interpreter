@@ -8,8 +8,8 @@ use crate::value::Value;
 #[derive(Debug, Clone, Default)]
 pub struct Environment {
     variables: HashMap<String, Value>,
-    parent: Option<Rc<RefCell<Environment>>>,
-}
+    parent: Option<Rc<RefCell<Environment>>>,   // Option<shared_ptr<#*<Environment>>> + RefCell -> 提供 &mut T 以外的借用可变引用的方式;
+}                                               // 即 borrow_mut(), borrow();   ps: Rc<RefCell<T>> 可实现可共享、可修改的引用，但需小心避免循环引用
 
 impl Environment {
     // 新建全局环境

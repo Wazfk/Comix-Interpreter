@@ -12,8 +12,10 @@ pub enum Opcode {
     Add,
     Sub,
     Mul,
+    // Div, Pow
     And,
     Or,
+    // Xor
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +31,7 @@ pub enum Stmt {
     If(Box<Expr>, Vec<Stmt>),                      // if
     IfElse(Box<Expr>, Vec<Stmt>, Vec<Stmt>),       // if-else
     While(Box<Expr>, Vec<Stmt>),                   // while
+    // For(Box<Expr>, Box<Expr>, Box<Expr>, VEc<STmt>)
     Assign(String, Box<Expr>),                     // 赋值
     VarDecl(Vec<String>, Type),                    // 变量声明 (ps: 此处设置影响报错，但目前为了简化暂不添加位置信息)
     Block(Vec<Stmt>),                              // 语句块

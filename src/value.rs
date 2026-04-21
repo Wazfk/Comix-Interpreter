@@ -39,9 +39,9 @@ impl Value {
     }
 }
 
-// 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // ostream& operator<<(ostream& os, Value& v) {}
         match self {
             Value::Int(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
@@ -55,7 +55,7 @@ impl fmt::Display for Value {
 // 单元测试代码
 #[cfg(test)]
 mod tests {
-    use super::*;   // 导入父模块的所有项（Value 等）
+    use super::*;   // 导入父模块的所有项
 
     #[test]
     fn test_is_truthy() {
