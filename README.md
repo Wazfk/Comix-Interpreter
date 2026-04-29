@@ -64,12 +64,12 @@ while y {
 ## 项目结构 (开发中)
 
 - `src/lib.rs` – 组织文件，仅用于开发阶段
-- `src/ast.rs` – 抽象语法树定义
+- `src/ast.rs` – 抽象语法树定义（待扩充）
 - `src/value.rs` – 运行时值（整数、布尔、空）
 - `src/environment.rs` – 变量作用域环境
-- `src/grammar.lalrpop` - lalrpop解析器语法定义文件
+- `src/grammar.lalrpop` - lalrpop解析器语法定义文件（待完善）
+- `src/evaluator.rs` – 解释执行逻辑
 
-- `src/evaluator.rs` – 解释执行逻辑（待开发）
 - `src/main.rs` – REPL 和文件入口（待开发）
 
 ## 依赖

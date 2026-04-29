@@ -55,6 +55,34 @@ impl Environment {
             Err(format!("变量 '{}' 未定义", name))
         }
     }
+
+    // 调试输出 打印当前环境 + 所有父环境的变量
+    pub fn dump(&self) {
+        self.dump_with_indent(0);
+    }
+
+    fn dump_with_indent(&self, indent: usize) {
+        let indent_str = "  ".repeat(indent);
+        println!("{}Environment ({} variables):", indent_str, self.variables.len());
+        for (name, value) in &self.variables {
+            println!("{}  {} = {}", indent_str, name, value);
+        }
+        if let Some(parent) = &self.parent {
+            println!("{}parent:", indent_str);
+            parent.borrow().dump_with_indent(indent + 1);
+        }
+    }
+
+    // 获取当前作用域的变量值
+    pub fn get_local(&self, name: &str) -> Option<Value> {
+        self.variables.get(name).cloned()
+    }
+
+    // 判断变量是否在当前作用域定义
+    pub fn defined_local(&self, name: &str) -> bool {
+        self.variables.contains_key(name)
+    }
+
 }
 
 
@@ -96,5 +124,38 @@ mod tests {
         // 对未定义的变量赋值应报错
         let result = env.borrow_mut().assign("y", Value::Int(99));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_local() {
+        let env = Environment::new();
+        env.borrow_mut().define("x", Value::Int(10));
+        // 创建子环境并遮蔽 x
+        let child = Environment::new_with_parent(env.clone());
+        child.borrow_mut().define("x", Value::Int(20));
+        
+        assert_eq!(child.borrow().get("x"), Some(Value::Int(20)));          // get 向上查找，取最近
+        assert_eq!(child.borrow().get_local("x"), Some(Value::Int(20)));    // get_local 只取当前层
+        assert_eq!(child.borrow().get_local("a"), None);                    // 父环境变量不在当前层
+    }
+
+    #[test]
+    fn test_defined_local() {
+        let env = Environment::new();
+        env.borrow_mut().define("x", Value::Int(10));
+        let child = Environment::new_with_parent(env.clone());
+        
+        assert!(env.borrow().defined_local("x"));
+        assert!(!child.borrow().defined_local("x")); // 子环境未定义 x，虽然父环境有
+    }
+
+    // 测试 dump (无panic)
+    #[test]
+    fn test_dump_does_not_panic() {
+        let env = Environment::new();
+        env.borrow_mut().define("foo", Value::Int(123));
+        let child = Environment::new_with_parent(env.clone());
+        child.borrow_mut().define("bar", Value::Bool(true));
+        child.borrow().dump();
     }
 }
