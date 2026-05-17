@@ -3,7 +3,7 @@
 Comix 是一个用 Rust 编写的简单解释型语言，支持变量、算术运算、逻辑运算、条件判断和循环。
 此项目正处于开发阶段，该文档将随开发进度实时更新。
 
-<!-- ## 如何运行
+## 如何运行
 
 ### 1. 编译
 
@@ -47,7 +47,7 @@ if a > 5 {
 
 ```bash
 cargo run -- test.cmx
-``` -->
+```
 
 ## 语法示例
 
@@ -68,14 +68,13 @@ while y {
 - `src/value.rs` – 运行时值（整数、布尔、空）
 - `src/environment.rs` – 变量作用域环境
 - `src/grammar.lalrpop` - lalrpop解析器语法定义文件（待完善）
-
-- `src/evaluator.rs` – 解释执行逻辑（待开发）
-- `src/main.rs` – REPL 和文件入口（待开发）
+- `src/evaluator.rs` – 解释执行逻辑
+- `src/main.rs` – REPL 和文件入口
 
 ## 依赖
 
 - [lalrpop](https://github.com/lalrpop/lalrpop) – 解析器生成器
-<!-- - [anyhow](https://github.com/dtolnay/anyhow) – 错误处理 -->
+- [anyhow](https://github.com/dtolnay/anyhow) – 错误处理
 
 ## 许可证
 
