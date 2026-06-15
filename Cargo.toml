@@ -6,6 +6,18 @@ edition = "2021"
 [dependencies]
 lalrpop-util = { version = "0.22.2", features = ["lexer"] }
 anyhow = "1.0"
+egui = "0.28"
+eframe = "0.28"
 
 [build-dependencies]
 lalrpop = "0.22.2"
+
+[source.crates-io]
+replace-with = 'ustc'
+
+[source.ustc]
+registry = "git://mirrors.ustc.edu.cn/crates.io-index"
+
+[net]
+retry = 2
+git-fetch-with-cli = true

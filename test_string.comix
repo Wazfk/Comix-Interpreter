@@ -1,0 +1,12 @@
+string s;
+s := "hello";
+string t;
+t := " world";
+string u;
+u := s + t;
+print u;
+print s + 42;
+if "abc" = "abc" then { print "equal"; };
+int a;
+a := 10 / 2;
+print a;

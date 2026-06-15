@@ -3,7 +3,9 @@ use std::fmt;
 
 pub enum Value {
     Int(i64),
+    Float(f64),
     Bool(bool),
+    String(String),
     Null,
 }
 
@@ -13,6 +15,8 @@ impl Value {
         match self {
             Value::Bool(b) => *b,
             Value::Int(n) => *n != 0,
+            Value::Float(f) => *f != 0.0,
+            Value::String(s) => !s.is_empty(),
             Value::Null => false,
         }
     }
@@ -21,6 +25,22 @@ impl Value {
     pub fn as_int(&self) -> Option<i64> {
         match self {
             Value::Int(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    // 尝试将值转换为浮点数
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            Value::Float(f) => Some(*f),
+            Value::Int(n) => Some(*n as f64),
+            _ => None,
+        }
+    }
+
+    pub fn as_string(&self) -> Option<&String> {
+        match self {
+            Value::String(s) => Some(s),
             _ => None,
         }
     }
@@ -44,7 +64,15 @@ impl fmt::Display for Value {
         // ostream& operator<<(ostream& os, Value& v) {}
         match self {
             Value::Int(n) => write!(f, "{}", n),
+            Value::Float(n) => {
+                if n.fract() == 0.0 {
+                    write!(f, "{:.0}", n)
+                } else {
+                    write!(f, "{}", n)
+                }
+            }
             Value::Bool(b) => write!(f, "{}", b),
+            Value::String(s) => write!(f, "{}", s),
             Value::Null => write!(f, "null"),
         }
     }

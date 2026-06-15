@@ -1,18 +1,188 @@
+// ==================== 1. 基本类型与变量声明 ====================
+int a;
+bool flag;
+string msg;
+float pi;
 
-int a, b, c;
-a := 5;
-b := 10;
-c := a + b;
-c;
+// ==================== 2. 变量赋值与表达式 ====================
+a := 10;
+flag := true;
+msg := "Hello";
+pi := 3.14159;
 
-if c > 10 then {
-    int d;
-    d := 20;
-    c := c + d;
-    c;
+print a;            // 10
+print flag;         // true
+print msg;          // Hello
+print pi;           // 3.14159
+
+// 整数运算
+int x, y, z;
+x := 5;
+y := 3;
+z := (x + y) * 2 - 4 / 2;  // (5+3)*2 - 2 = 14
+print z;
+
+// 浮点数运算
+float r, area;
+r := 2.5;
+area := pi * r * r;
+print area;          // 19.6349375
+
+// 混合运算（整数 + 浮点数 → 浮点数）
+float mixed;
+mixed := a + pi;     // 10 + 3.14159 = 13.14159
+print mixed;
+
+// 除法
+int d1, d2;
+d1 := 10 / 3;        // 整数除法 = 3
+d2 := 10 / 2;        // = 5
+print d1;
+print d2;
+
+float fd;
+fd := 10.0 / 3;      // 浮点除法 ≈ 3.333333
+print fd;
+
+// 负数
+int neg1;
+neg1 := -5;
+float neg2;
+neg2 := -3.14;
+print neg1;          // -5
+print neg2;          // -3.14
+
+// ==================== 3. 布尔运算与比较 ====================
+bool b1, b2, b3;
+b1 := 10 > 5;        // true
+b2 := 3 <= 3;        // true
+b3 := (1 = 1) and (2 != 3);   // true and true = true  (注意：不等于用 !=)
+print b1;
+print b2;
+print b3;
+
+// 逻辑运算
+bool l1, l2;
+l1 := true and false;   // false
+l2 := not (false or true);  // false
+print l1;
+print l2;
+
+// 字符串比较
+if "abc" = "abc" then {
+    print "strings equal";
 };
 
-while a < 8 do {
-    a := a + 1;
-    a; 
+// 浮点数比较
+if 3.14 > 3.0 then {
+    print "pi is bigger";
 };
+
+// ==================== 4. 条件语句 ====================
+if a > 5 then {
+    print "a > 5";
+} else {
+    print "a <= 5";
+};
+
+// 嵌套 if
+if flag then {
+    if a = 10 then {
+        print "flag true and a=10";
+    };
+};
+
+// ==================== 5. 循环 ====================
+// while 循环
+int i;
+i := 0;
+while i < 3 do {
+    print i;
+    i := i + 1;
+};
+
+// for 循环
+int sum;
+sum := 0;
+for j := 1 to 5 do {
+    sum := sum + j;
+};
+print sum;   // 15
+
+// ==================== 6. 函数定义与调用 ====================
+// 简单加法
+func add(int a, int b) -> int {
+    return a + b;
+};
+print add(7, 8);   // 15
+
+// 带浮点参数的函数
+func circle_area(float r) -> float {
+    return 3.14159 * r * r;
+};
+print circle_area(3.0);   // 28.27431
+
+// 递归：阶乘
+func factorial(int n) -> int {
+    if n <= 1 then {
+        return 1;
+    } else {
+        return n * factorial(n - 1);
+    };
+};
+print factorial(5);   // 120
+
+// 函数内调用其他函数
+func double(int x) -> int {
+    return x * 2;
+};
+func quad(int x) -> int {
+    return double(x) * 2;
+};
+print quad(3);   // 12
+
+// 无返回值函数（返回 null）
+func say_hello() -> int {
+    print "hello";
+};
+say_hello();
+
+// ==================== 7. 字符串拼接 ====================
+string s1, s2, s3;
+s1 := "Hello";
+s2 := " World";
+s3 := s1 + s2;
+print s3;            // Hello World
+print s1 + 42;       // Hello42
+print "Value: " + pi; // Value: 3.14159
+
+// ==================== 8. 复合语句与作用域 ====================
+int outer;
+outer := 100;
+{
+    int inner;
+    inner := 200;
+    print inner;     // 200
+    outer := outer + inner;
+};
+print outer;         // 300
+// print inner;      // 错误：inner 已超出作用域（注释掉以避免错误）
+
+// ==================== 9. 注释与空语句 ====================
+// 单行注释
+int dummy;   // 行末注释
+dummy := 0;
+print dummy;
+
+// ==================== 10. 类型混合复杂表达式 ====================
+float result;
+result := (10 + 2.5) * (8 - 3) / 2.0;
+print result;        // (12.5 * 5) / 2 = 31.25
+
+// 比较混合类型（注意：整数与浮点比较自动提升）
+if 5 = 5.0 then {
+    print "5 equals 5.0";
+};
+
+// ==================== 结束 ====================
+print "All tests passed!";

@@ -13,20 +13,27 @@ match {
     "or" => OR,
     "int" => INT,
     "bool" => BOOL,
+    "true" => TRUE,
+    "false" => FALSE,
+    "string" => STRING_TYPE,
+    "float" => FLOAT_TYPE,
+    "print" => PRINT,
+    "for" => FOR,
+    "to" => TO,
+    "func" => FUNC,
+    "return" => RETURN,
 } else {
     r"\s*" => {},
     r"//[^\n\r]*[\n\r]*" => {},
+    r#""([^"\\]|\\.)*""# => STRING,
     r"[a-zA-Z_][a-zA-Z0-9_]*" => ID,
-    r"[0-9]+" => NUM,
+    r"[0-9]+\.[0-9]+" => FLOAT_NUM,
+    r"[0-9]+" => INT_NUM,
     _
 }
 
 pub StmtList: Vec<Stmt> = {
-    <l:StmtList> <s:Stmt> ";" => {
-        let mut l = l;
-        l.push(*s);
-        l
-    },
+    <l:StmtList> <s:Stmt> ";" => { let mut l = l; l.push(*s); l },
     <s:Stmt> ";" => vec![*s],
 };
 
@@ -38,6 +45,13 @@ Stmt: Box<Stmt> = {
     <t:Type> <i:IdList> => Box::new(Stmt::VarDecl(i, t)),
     <b:Block> => Box::new(Stmt::Block(b)),
     <e:Expr> => Box::new(Stmt::Expr(e)),
+    PRINT <e:Expr> => Box::new(Stmt::Print(e)),
+    FOR <var:Id> ":=" <from:Expr> TO <to:Expr> DO <body:Block> => 
+        Box::new(Stmt::For(var, from, to, body)),
+    <start:@L> FUNC <name:Id> "(" <params:ParamList> ")" "->" <ret_type:Type> <body:Block> <end:@R> => 
+        Box::new(Stmt::FuncDef(name, params, ret_type, body, start, end)),
+    <start:@L> RETURN <e:Expr> <end:@R> => Box::new(Stmt::Return(Some(e), start, end)),
+    <start:@L> RETURN <end:@R> => Box::new(Stmt::Return(None, start, end)),
 };
 
 Block: Vec<Stmt> = {
@@ -58,8 +72,11 @@ LogicalExpr: Box<Expr> = {
 RelExpr: Box<Expr> = {
     <e:SimpleExpr> => e,
     <e:SimpleExpr> "=" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::Equal, e, s)),
+    <e:SimpleExpr> "!=" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::NotEqual, e, s)),
     <e:SimpleExpr> "<" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::LessThan, e, s)),
     <e:SimpleExpr> ">" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::GreaterThan, e, s)),
+    <e:SimpleExpr> "<=" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::LessOrEqual, e, s)),
+    <e:SimpleExpr> ">=" <s:SimpleExpr> => Box::new(Expr::Op(Opcode::GreaterOrEqual, e, s)),
 };
 
 SimpleExpr: Box<Expr> = {
@@ -71,17 +88,33 @@ SimpleExpr: Box<Expr> = {
 Term: Box<Expr> = {
     <f:Factor> => f,
     <t:Term> "*" <f:Factor> => Box::new(Expr::Op(Opcode::Mul, t, f)),
+    <t:Term> "/" <f:Factor> => Box::new(Expr::Op(Opcode::Div, t, f)),   // 除法在这里
 };
 
 Factor: Box<Expr> = {
     "(" <e:Expr> ")" => e,
-    <i:Id> => Box::new(Expr::Id(i, 0, 0)),
-    <n:Num> => Box::new(Expr::Num(n)),
+    <start:@L> "-" <f:Factor> <end:@R> => Box::new(Expr::Neg(f, start, end)),
+    <start:@L> <i:Id> "(" <args:ArgList> ")" <end:@R> => Box::new(Expr::Call(i, args, start, end)),
+    <start:@L> <i:Id> <end:@R> => Box::new(Expr::Id(i, start, end)),
+    <start:@L> <n:INT_NUM> <end:@R> => Box::new(Expr::Num(n.parse().unwrap(), start, end)),
+    <start:@L> <f:FLOAT_NUM> <end:@R> => {
+        let val = f.parse::<f64>().unwrap();
+        Box::new(Expr::FloatLit(val, start, end))
+    },
+    <start:@L> <s:STRING> <end:@R> => {
+        let content = s[1..s.len()-1].to_string();
+        let content = content.replace("\\\"", "\"").replace("\\\\", "\\");
+        Box::new(Expr::StringLit(content, start, end))
+    },
+    <start:@L> TRUE <end:@R> => Box::new(Expr::BoolLit(true, start, end)),
+    <start:@L> FALSE <end:@R> => Box::new(Expr::BoolLit(false, start, end)),
 };
 
 Type: Type = {
     INT => Type::Int,
     BOOL => Type::Bool,
+    STRING_TYPE => Type::String,
+    FLOAT_TYPE => Type::Float,
 };
 
 IdList: Vec<String> = {
@@ -97,6 +130,26 @@ Id: String = {
     ID => <>.to_string(),
 };
 
-Num: u32 = {
-    NUM => <>.parse().unwrap(),
+ParamList: Vec<(String, Type)> = {
+    => vec![],
+    <p:Param> => vec![p],
+    <p:Param> "," <rest:ParamList> => {
+        let mut v = vec![p];
+        v.extend(rest);
+        v
+    },
+};
+
+Param: (String, Type) = {
+    <t:Type> <id:Id> => (id, t),
+};
+
+ArgList: Vec<Expr> = {
+    => vec![],
+    <e:Expr> => vec![(*e)],
+    <e:Expr> "," <rest:ArgList> => {
+        let mut v = vec![(*e)];
+        v.extend(rest);
+        v
+    },
 };

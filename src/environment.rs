@@ -73,6 +73,22 @@ impl Environment {
         }
     }
 
+    pub fn dump_to_string(&self, output: &mut String) {
+        self.dump_to_string_with_indent(0, output);
+    }
+
+    fn dump_to_string_with_indent(&self, indent: usize, output: &mut String) {
+        let indent_str = "  ".repeat(indent);
+        output.push_str(&format!("{}Environment ({} variables):\n", indent_str, self.variables.len()));
+        for (name, value) in &self.variables {
+            output.push_str(&format!("{}  {} = {}\n", indent_str, name, value));
+        }
+        if let Some(parent) = &self.parent {
+            output.push_str(&format!("{}parent:\n", indent_str));
+            parent.borrow().dump_to_string_with_indent(indent + 1, output);
+        }
+    }
+
     // 获取当前作用域的变量值
     pub fn get_local(&self, name: &str) -> Option<Value> {
         self.variables.get(name).cloned()

@@ -1,80 +1,114 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-
+use std::collections::HashMap;
 use crate::ast::{Expr, Opcode, Stmt, Type};
 use crate::value::Value;
 use crate::environment::Environment;
 
-/// 解释器，负责执行AST
+type FuncBody = Vec<Stmt>;
+type ParamList = Vec<(String, Type)>;
+
+#[derive(Debug)]
+pub enum EvalError {
+    Runtime(String),
+    Return(Value),
+}
+
+impl From<String> for EvalError {
+    fn from(s: String) -> Self {
+        EvalError::Runtime(s)
+    }
+}
+
+impl std::fmt::Display for EvalError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EvalError::Runtime(msg) => write!(f, "{}", msg),
+            EvalError::Return(v) => write!(f, "{}", v),
+        }
+    }
+}
+
+fn get_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (byte_idx, byte) in source.as_bytes().iter().enumerate() {
+        if byte_idx == offset {
+            break;
+        }
+        if *byte == b'\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
 pub struct Evaluator {
     environment: Rc<RefCell<Environment>>,
+    source: String,
+    functions: HashMap<String, (ParamList, Type, FuncBody, usize, usize)>,
 }
 
 impl Evaluator {
-    /// 创建新的解释器
-    pub fn new(environment: Rc<RefCell<Environment>>) -> Self {
-        Self { environment }
+    pub fn new(environment: Rc<RefCell<Environment>>, source: String) -> Self {
+        Self {
+            environment,
+            source,
+            functions: HashMap::new(),
+        }
     }
-    
-    /// 执行语句列表
-    // pub fn evaluate(&mut self, stmts: &[Stmt]) -> Result<Value, String> {
-    //     let mut result = Value::Null;
-        
-    //     for stmt in stmts {
-    //         result = self.execute(stmt)?;
-    //     }
-        
-    //     Ok(result)
-    // }
-    
-    pub fn evaluate(&mut self, stmts: &[Stmt]) -> Result<Value, String> {
+
+    pub fn set_source(&mut self, source: String) {
+        self.source = source;
+    }
+
+    pub fn evaluate(&mut self, stmts: &[Stmt]) -> Result<Value, EvalError> {
         let mut result = Value::Null;
-        
         for stmt in stmts {
             result = self.execute(stmt)?;
-            // 如果语句是表达式语句，打印结果
             if let Stmt::Expr(_) = stmt {
                 if !result.is_null() {
                     println!("{}", result);
                 }
             }
         }
-        
         Ok(result)
     }
 
-    /// 执行单条语句
-    fn execute(&mut self, stmt: &Stmt) -> Result<Value, String> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<Value, EvalError> {
         match stmt {
             Stmt::Assign(var, expr) => {
                 let value = self.eval_expr(expr)?;
-                self.environment.borrow_mut().assign(var, value.clone())?;
+                self.environment.borrow_mut().assign(var, value.clone())
+                    .map_err(EvalError::Runtime)?;
                 Ok(value)
             }
-            
+
             Stmt::VarDecl(vars, var_type) => {
                 for var in vars {
-                    // 根据类型设置默认值
                     let default_value = match var_type {
                         Type::Int => Value::Int(0),
                         Type::Bool => Value::Bool(false),
+                        Type::String => Value::String(String::new()),
+                        Type::Float => Value::Float(0.0),
                     };
                     self.environment.borrow_mut().define(var, default_value);
                 }
                 Ok(Value::Null)
             }
-            
-            Stmt::Expr(expr) => {
-                self.eval_expr(expr)
-            }
-            
+
+            Stmt::Expr(expr) => self.eval_expr(expr),
+
             Stmt::If(cond, then_branch) => {
                 if self.eval_expr(cond)?.is_truthy() {
                     self.evaluate(then_branch)?;
                 }
                 Ok(Value::Null)
             }
-            
+
             Stmt::IfElse(cond, then_branch, else_branch) => {
                 if self.eval_expr(cond)?.is_truthy() {
                     self.evaluate(then_branch)?;
@@ -83,99 +117,308 @@ impl Evaluator {
                 }
                 Ok(Value::Null)
             }
-            
+
             Stmt::While(cond, body) => {
                 while self.eval_expr(cond)?.is_truthy() {
                     self.evaluate(body)?;
                 }
                 Ok(Value::Null)
             }
-            
+
             Stmt::Block(stmts) => {
-                // 为块语句创建新的作用域
                 let new_env = Environment::new_with_parent(self.environment.clone());
-                let mut block_evaluator = Evaluator::new(new_env);
-                block_evaluator.evaluate(stmts)
+                let mut block_eval = Evaluator::new(new_env, self.source.clone());
+                block_eval.evaluate(stmts)
+            }
+
+            Stmt::Print(expr) => {
+                let value = self.eval_expr(expr)?;
+                println!("{}", value);
+                Ok(Value::Null)
+            }
+
+            Stmt::For(var_name, start_expr, end_expr, body) => {
+                let for_env = Environment::new_with_parent(self.environment.clone());
+                let start_val = self.eval_expr(start_expr)?;
+                // 允许起始值为整数（for 循环仍使用整数计数）
+                let start_int = start_val.as_int()
+                    .ok_or_else(|| EvalError::Runtime("for 循环起始值必须是整数".to_string()))?;
+                for_env.borrow_mut().define(var_name, Value::Int(start_int));
+
+                let mut child_eval = Evaluator::new(for_env.clone(), self.source.clone());
+
+                let cond_expr = Expr::Op(
+                    Opcode::LessOrEqual,
+                    Box::new(Expr::Id(var_name.clone(), 0, 0)),
+                    Box::new((**end_expr).clone()),
+                );
+
+                let update_stmt = Stmt::Assign(
+                    var_name.clone(),
+                    Box::new(Expr::Op(
+                        Opcode::Add,
+                        Box::new(Expr::Id(var_name.clone(), 0, 0)),
+                        Box::new(Expr::Num(1, 0, 0)),
+                    )),
+                );
+
+                while child_eval.eval_expr(&cond_expr)?.is_truthy() {
+                    child_eval.evaluate(body)?;
+                    child_eval.execute(&update_stmt)?;
+                }
+                Ok(Value::Null)
+            }
+
+            Stmt::FuncDef(name, params, ret_type, body, _start, _end) => {
+                self.functions.insert(name.clone(), (params.clone(), *ret_type, body.clone(), *_start, *_end));
+                Ok(Value::Null)
+            }
+
+            Stmt::Return(expr_opt, _start, _end) => {
+                let value = match expr_opt {
+                    Some(expr) => self.eval_expr(expr)?,
+                    None => Value::Null,
+                };
+                Err(EvalError::Return(value))
             }
         }
     }
-    
-    /// 计算表达式的值
-    fn eval_expr(&self, expr: &Expr) -> Result<Value, String> {
+
+    fn eval_expr(&self, expr: &Expr) -> Result<Value, EvalError> {
         match expr {
-            Expr::Id(name, _, _) => {
-                self.environment.borrow()
+            Expr::Id(name, start, _) => {
+                let value = self.environment.borrow()
                     .get(name)
-                    .ok_or_else(|| format!("变量 '{}' 未定义", name))
+                    .ok_or_else(|| {
+                        let (line, col) = get_line_col(&self.source, *start);
+                        EvalError::Runtime(format!("{}:{} 变量 '{}' 未定义", line, col, name))
+                    })?;
+                Ok(value)
             }
-            
-            Expr::Num(n) => Ok(Value::Int(*n as i64)),
-            
+
+            Expr::Num(n, _, _) => Ok(Value::Int(*n as i64)),
+
+            Expr::FloatLit(f, _, _) => Ok(Value::Float(*f)),
+
+            Expr::StringLit(s, _, _) => Ok(Value::String(s.clone())),
+
+            Expr::BoolLit(b, _, _) => Ok(Value::Bool(*b)),
+
             Expr::Op(op, left, right) => {
                 let left_val = self.eval_expr(left)?;
                 let right_val = self.eval_expr(right)?;
-                
+
                 match op {
                     Opcode::Add => {
-                        let left_int = left_val.as_int().ok_or("加法需要整数操作数")?;
-                        let right_int = right_val.as_int().ok_or("加法需要整数操作数")?;
-                        Ok(Value::Int(left_int + right_int))
-                    }
-                    
-                    Opcode::Sub => {
-                        let left_int = left_val.as_int().ok_or("减法需要整数操作数")?;
-                        let right_int = right_val.as_int().ok_or("减法需要整数操作数")?;
-                        Ok(Value::Int(left_int - right_int))
-                    }
-                    
-                    Opcode::Mul => {
-                        let left_int = left_val.as_int().ok_or("乘法需要整数操作数")?;
-                        let right_int = right_val.as_int().ok_or("乘法需要整数操作数")?;
-                        Ok(Value::Int(left_int * right_int))
-                    }
-                    
-                    Opcode::GreaterThan => {
-                        let left_int = left_val.as_int().ok_or("比较需要整数操作数")?;
-                        let right_int = right_val.as_int().ok_or("比较需要整数操作数")?;
-                        Ok(Value::Bool(left_int > right_int))
-                    }
-                    
-                    Opcode::LessThan => {
-                        let left_int = left_val.as_int().ok_or("比较需要整数操作数")?;
-                        let right_int = right_val.as_int().ok_or("比较需要整数操作数")?;
-                        Ok(Value::Bool(left_int < right_int))
-                    }
-                    
-                    Opcode::Equal => {
-                        // 支持整数和布尔值的比较
-                        if let (Some(left_int), Some(right_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(left_int == right_int))
-                        } else if let (Some(left_bool), Some(right_bool)) = (left_val.as_bool(), right_val.as_bool()) {
-                            Ok(Value::Bool(left_bool == right_bool))
-                        } else {
-                            Err("相等比较需要相同类型的操作数".to_string())
+                        // 整数加法优先
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Int(l_int + r_int))
+                        }
+                        // 浮点加法（包括混合）
+                        else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Float(lf + rf))
+                        }
+                        // 字符串拼接（保留原有逻辑）
+                        else if let Some(l_str) = left_val.as_string() {
+                            let r_str = right_val.as_string()
+                                .map(|s| s.clone())
+                                .or_else(|| right_val.as_int().map(|i| i.to_string()))
+                                .or_else(|| right_val.as_float().map(|f| f.to_string()))
+                                .ok_or_else(|| EvalError::Runtime("加法：右操作数无法转换为字符串".to_string()))?;
+                            Ok(Value::String(format!("{}{}", l_str, r_str)))
+                        }
+                        else if let Some(r_str) = right_val.as_string() {
+                            let l_str = left_val.as_int()
+                                .map(|i| i.to_string())
+                                .or_else(|| left_val.as_float().map(|f| f.to_string()))
+                                .ok_or_else(|| EvalError::Runtime("加法：左操作数无法转换为字符串".to_string()))?;
+                            Ok(Value::String(format!("{}{}", l_str, r_str)))
+                        }
+                        else {
+                            Err(EvalError::Runtime("加法需要数字或字符串操作数".to_string()))
                         }
                     }
-                    
-                    Opcode::And => {
-                        let left_bool = left_val.as_bool().ok_or("逻辑与需要布尔操作数")?;
-                        let right_bool = right_val.as_bool().ok_or("逻辑与需要布尔操作数")?;
-                        Ok(Value::Bool(left_bool && right_bool))
+
+                    Opcode::Sub => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Int(l_int - r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Float(lf - rf))
+                        } else {
+                            Err(EvalError::Runtime("减法需要数字操作数".to_string()))
+                        }
                     }
-                    
+
+                    Opcode::Mul => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Int(l_int * r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Float(lf * rf))
+                        } else {
+                            Err(EvalError::Runtime("乘法需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::Div => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            if r_int == 0 {
+                                return Err(EvalError::Runtime("除数不能为零".to_string()));
+                            }
+                            Ok(Value::Int(l_int / r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            if rf == 0.0 {
+                                return Err(EvalError::Runtime("除数不能为零".to_string()));
+                            }
+                            Ok(Value::Float(lf / rf))
+                        } else {
+                            Err(EvalError::Runtime("除法需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::GreaterThan => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int > r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf > rf))
+                        } else {
+                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::GreaterOrEqual => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int >= r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf >= rf))
+                        } else {
+                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::LessThan => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int < r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf < rf))
+                        } else {
+                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::LessOrEqual => {
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int <= r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf <= rf))
+                        } else {
+                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::Equal => {
+                        // 先尝试整数，再浮点，再布尔，再字符串
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int == r_int))
+                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf == rf))
+                        } else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
+                            Ok(Value::Bool(l_bool == r_bool))
+                        } else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
+                            Ok(Value::Bool(l_str == r_str))
+                        } else {
+                            Err(EvalError::Runtime("相等比较需要相同类型的操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::NotEqual => {
+                        // 先尝试整数，再浮点，再布尔，再字符串
+                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                            Ok(Value::Bool(l_int != r_int))
+                        }
+                        else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                            Ok(Value::Bool(lf != rf))
+                        }
+                        else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
+                            Ok(Value::Bool(l_bool != r_bool))
+                        }
+                        else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
+                            Ok(Value::Bool(l_str != r_str))
+                        }
+                        else {
+                            Err(EvalError::Runtime("不等比较需要相同类型的操作数".to_string()))
+                        }
+                    }
+
+                    Opcode::And => {
+                        let l = left_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑与需要布尔操作数".to_string()))?;
+                        let r = right_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑与需要布尔操作数".to_string()))?;
+                        Ok(Value::Bool(l && r))
+                    }
+
                     Opcode::Or => {
-                        let left_bool = left_val.as_bool().ok_or("逻辑或需要布尔操作数")?;
-                        let right_bool = right_val.as_bool().ok_or("逻辑或需要布尔操作数")?;
-                        Ok(Value::Bool(left_bool || right_bool))
+                        let l = left_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑或需要布尔操作数".to_string()))?;
+                        let r = right_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑或需要布尔操作数".to_string()))?;
+                        Ok(Value::Bool(l || r))
                     }
                 }
             }
-            
+
             Expr::Not(expr) => {
                 let val = self.eval_expr(expr)?;
-                let bool_val = val.as_bool().ok_or("逻辑非需要布尔操作数")?;
-                Ok(Value::Bool(!bool_val))
+                let b = val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑非需要布尔操作数".to_string()))?;
+                Ok(Value::Bool(!b))
+            }
+
+            Expr::Call(func_name, args, _start, _end) => {
+                let (params, _ret_type, body, ..) = self.functions.get(func_name)
+                    .ok_or_else(|| EvalError::Runtime(format!("函数 '{}' 未定义", func_name)))?;
+
+                if args.len() != params.len() {
+                    return Err(EvalError::Runtime(format!("函数 '{}' 需要 {} 个参数，提供了 {} 个",
+                        func_name, params.len(), args.len())));
+                }
+
+                let mut arg_values = Vec::new();
+                for arg in args {
+                    arg_values.push(self.eval_expr(arg)?);
+                }
+
+                let func_env = Environment::new_with_parent(self.environment.clone());
+                {
+                    let mut env_ref = func_env.borrow_mut();
+                    for ((param_name, _param_type), arg_val) in params.iter().zip(arg_values) {
+                        env_ref.define(param_name, arg_val);
+                    }
+                }
+
+                let mut child_eval = Evaluator::new(func_env, self.source.clone());
+                child_eval.functions = self.functions.clone();
+
+                match child_eval.evaluate(body) {
+                    Ok(v) => Ok(v),
+                    Err(EvalError::Return(v)) => Ok(v),
+                    Err(e) => Err(e),
+                }
+            }
+
+            Expr::Neg(expr, _start, _end) => {
+                let val = self.eval_expr(expr)?;
+                if let Some(i) = val.as_int() {
+                    Ok(Value::Int(-i))
+                } else if let Some(f) = val.as_float() {
+                    Ok(Value::Float(-f))
+                } else {
+                    Err(EvalError::Runtime("负数只能应用于数字".to_string()))
+                }
             }
         }
+    }
+
+    pub fn dump_env(&self) {
+        self.environment.borrow().dump();
+    }
+
+    pub fn dump_env_to_string(&self, output: &mut String) {
+        self.environment.borrow().dump_to_string(output);
     }
 }
