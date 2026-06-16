@@ -1,12 +1,11 @@
-// 声明整数数组
-array<int> arr;
-arr := [1, 2, 3, 4];
-print arr[0];   // 输出 1
-arr[2] := 10;   // 修改索引 2 的元素
-print arr[2];   // 输出 10
-print arr;      // 输出 [1, 2, 10, 4]
+func fib(int n) -> int {
+    if n <= 1 then {
+        return n;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    };
+};
 
-// 空数组
-array<int> empty;
-empty := [];
-print empty;    // 输出 []
+for i := 1 to 5 do {
+    print fib(i);
+};

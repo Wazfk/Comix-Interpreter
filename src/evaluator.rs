@@ -150,6 +150,7 @@ impl Evaluator {
             Stmt::Block(stmts) => {
                 let new_env = Environment::new_with_parent(self.environment.clone());
                 let mut block_eval = Evaluator::new(new_env, self.source.clone());
+                block_eval.functions = self.functions.clone();
                 block_eval.evaluate(stmts)
             }
 
@@ -167,7 +168,8 @@ impl Evaluator {
                 for_env.borrow_mut().define(var_name, Value::Int(start_int));
 
                 let mut child_eval = Evaluator::new(for_env.clone(), self.source.clone());
-
+                child_eval.functions = self.functions.clone();
+                
                 let cond_expr = Expr::Op(
                     Opcode::LessOrEqual,
                     Box::new(Expr::Id(var_name.clone(), 0, 0)),
