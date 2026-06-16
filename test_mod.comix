@@ -1,0 +1,12 @@
+// 声明整数数组
+array<int> arr;
+arr := [1, 2, 3, 4];
+print arr[0];   // 输出 1
+arr[2] := 10;   // 修改索引 2 的元素
+print arr[2];   // 输出 10
+print arr;      // 输出 [1, 2, 10, 4]
+
+// 空数组
+array<int> empty;
+empty := [];
+print empty;    // 输出 []

@@ -1,9 +1,10 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int,
     Float,
     Bool,
     String,
+    Array(Box<Type>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -17,10 +18,9 @@ pub enum Opcode {
     Add,
     Sub,
     Mul,
-    Div, // Pow
+    Div,
     And,
     Or,
-    // Xor
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +34,8 @@ pub enum Expr {
     Not(Box<Expr>),                             // 一元运算
     Neg(Box<Expr>, usize, usize),               // 负号
     Call(String, Vec<Expr>, usize, usize),      // 函数调用
+    ArrayLit(Vec<Expr>, usize, usize),          // 数组字面量
+    Index(Box<Expr>, Box<Expr>, usize, usize),  // 数组索引
 }
 
 #[derive(Debug, Clone)]
@@ -42,7 +44,7 @@ pub enum Stmt {
     IfElse(Box<Expr>, Vec<Stmt>, Vec<Stmt>),       // if-else
     While(Box<Expr>, Vec<Stmt>),                   // while
     For(String, Box<Expr>, Box<Expr>, Vec<Stmt>),  // for
-    Assign(String, Box<Expr>),                     // 赋值
+    Assign(Box<Expr>, Box<Expr>),                  // 赋值
     VarDecl(Vec<String>, Type),                    // 变量声明
     Block(Vec<Stmt>),                              // 语句块
     Expr(Box<Expr>),                               // 表达式语句

@@ -22,6 +22,7 @@ match {
     "to" => TO,
     "func" => FUNC,
     "return" => RETURN,
+    "array" => ARRAY,                       // ← 新增数组关键字
 } else {
     r"\s*" => {},
     r"//[^\n\r]*[\n\r]*" => {},
@@ -41,7 +42,7 @@ Stmt: Box<Stmt> = {
     IF <e:Expr> THEN <s:Block> => Box::new(Stmt::If(e, s)),
     IF <e:Expr> THEN <s:Block> ELSE <r:Block> => Box::new(Stmt::IfElse(e, s, r)),
     WHILE <e:Expr> DO <s:Block> => Box::new(Stmt::While(e, s)),
-    <i:Id> ":=" <e:Expr> => Box::new(Stmt::Assign(i, e)),
+    <l:Expr> ":=" <r:Expr> => Box::new(Stmt::Assign(l, r)),    // ← 左侧改为任意 Expr
     <t:Type> <i:IdList> => Box::new(Stmt::VarDecl(i, t)),
     <b:Block> => Box::new(Stmt::Block(b)),
     <e:Expr> => Box::new(Stmt::Expr(e)),
@@ -64,7 +65,7 @@ Expr: Box<Expr> = {
 
 LogicalExpr: Box<Expr> = {
     <e:RelExpr> => e,
-    NOT <f:Factor> => Box::new(Expr::Not(f)),
+    NOT <f:Factor> => Box::new(Expr::Not(f)),   // 注意 NOT 优先级高于 AND/OR
     <e:LogicalExpr> AND <r:RelExpr> => Box::new(Expr::Op(Opcode::And, e, r)),
     <e:LogicalExpr> OR <r:RelExpr> => Box::new(Expr::Op(Opcode::Or, e, r)),
 };
@@ -88,12 +89,24 @@ SimpleExpr: Box<Expr> = {
 Term: Box<Expr> = {
     <f:Factor> => f,
     <t:Term> "*" <f:Factor> => Box::new(Expr::Op(Opcode::Mul, t, f)),
-    <t:Term> "/" <f:Factor> => Box::new(Expr::Op(Opcode::Div, t, f)),   // 除法在这里
+    <t:Term> "/" <f:Factor> => Box::new(Expr::Op(Opcode::Div, t, f)),
 };
 
+// 重构后的 Factor：支持一元负号和后缀索引
 Factor: Box<Expr> = {
-    "(" <e:Expr> ")" => e,
+    <p:Primary> <s:IndexSuffix*> => {
+        let mut expr = p;
+        for (idx, start, end) in s {
+            expr = Box::new(Expr::Index(expr, idx, start, end));
+        }
+        expr
+    },
     <start:@L> "-" <f:Factor> <end:@R> => Box::new(Expr::Neg(f, start, end)),
+};
+
+// 原子表达式（不含后缀操作）
+Primary: Box<Expr> = {
+    "(" <e:Expr> ")" => e,
     <start:@L> <i:Id> "(" <args:ArgList> ")" <end:@R> => Box::new(Expr::Call(i, args, start, end)),
     <start:@L> <i:Id> <end:@R> => Box::new(Expr::Id(i, start, end)),
     <start:@L> <n:INT_NUM> <end:@R> => Box::new(Expr::Num(n.parse().unwrap(), start, end)),
@@ -108,6 +121,13 @@ Factor: Box<Expr> = {
     },
     <start:@L> TRUE <end:@R> => Box::new(Expr::BoolLit(true, start, end)),
     <start:@L> FALSE <end:@R> => Box::new(Expr::BoolLit(false, start, end)),
+    // 数组字面量
+    <start:@L> "[" <elems:ArgList> "]" <end:@R> => Box::new(Expr::ArrayLit(elems, start, end)),
+};
+
+// 索引后缀：返回 (索引表达式, 起始位置, 结束位置)
+IndexSuffix: (Box<Expr>, usize, usize) = {
+    <start:@L> "[" <idx:Expr> "]" <end:@R> => (idx, start, end),
 };
 
 Type: Type = {
@@ -115,6 +135,7 @@ Type: Type = {
     BOOL => Type::Bool,
     STRING_TYPE => Type::String,
     FLOAT_TYPE => Type::Float,
+    ARRAY "<" <inner:Type> ">" => Type::Array(Box::new(inner)),   // ← 数组类型
 };
 
 IdList: Vec<String> = {
@@ -152,4 +173,4 @@ ArgList: Vec<Expr> = {
         v.extend(rest);
         v
     },
-};
+}

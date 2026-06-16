@@ -6,6 +6,7 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     String(String),
+    Array(Vec<Value>),
     Null,
 }
 
@@ -17,6 +18,7 @@ impl Value {
             Value::Int(n) => *n != 0,
             Value::Float(f) => *f != 0.0,
             Value::String(s) => !s.is_empty(),
+            Value::Array(v) => !v.is_empty(),
             Value::Null => false,
         }
     }
@@ -52,6 +54,20 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_array(&self) -> Option<&Vec<Value>> {
+        match self {
+            Value::Array(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    pub fn as_array_mut(&mut self) -> Option<&mut Vec<Value>> {
+        match self {
+            Value::Array(v) => Some(v),
+            _ => None,
+        }
+    }
     
     // 检查值是否为空
     pub fn is_null(&self) -> bool {
@@ -73,6 +89,16 @@ impl fmt::Display for Value {
             }
             Value::Bool(b) => write!(f, "{}", b),
             Value::String(s) => write!(f, "{}", s),
+            Value::Array(v) => {
+                write!(f, "[")?;
+                for (i, val) in v.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", val)?;
+                }
+                write!(f, "]")
+            }
             Value::Null => write!(f, "null"),
         }
     }

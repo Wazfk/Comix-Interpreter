@@ -10,38 +10,31 @@
 - 添加了 `print` 语句及字符串拼接（支持字符串与数字混合）。  
 - 实现了基于 egui 的图形界面（IDE），支持代码编辑、运行、输出显示和变量监视。  
 - 通过了覆盖所有特性的集成测试。
+- 实现了数组类型（`array<T>`）及完整的数组操作：字面量、索引读写、空数组支持。
 
 ### 新增
-- **值系统**：`Value::Float(f64)`、`Value::String(String)`，实现 `as_float()`、`as_string()` 和真值判断。
-- **类型系统**：`Type::Float`、`Type::String`。
-- **表达式**：`Expr::FloatLit`、`Expr::StringLit`、`Expr::BoolLit`、`Expr::Call`、`Expr::Neg`。
-- **语句**：`Stmt::Print`、`Stmt::For`、`Stmt::FuncDef`、`Stmt::Return`。
-- **运算符**：`/`、`<=`、`>=`、`!=` 以及一元负号 `-`。
-- **语法解析**：支持浮点字面量、字符串字面量、布尔字面量；添加关键字 `float`、`string`、`true`、`false`、`print`、`for`、`to`、`func`、`return`；函数参数列表、返回类型语法。
+- **值系统**：`Value::Array(Vec<Value>)` 及 `as_array()` 方法。
+- **类型系统**：`Type::Array(Box<Type>)`，语法为 `array<类型>`。
+- **表达式**：`Expr::ArrayLit(Vec<Expr>, usize, usize)` 和 `Expr::Index(Box<Expr>, Box<Expr>, usize, usize)`。
+- **语句**：`Stmt::Assign` 左侧改为 `Box<Expr>`，支持索引赋值。
+- **语法**：
+  - 数组字面量 `[e1, e2, ...]`（支持空数组 `[]`）。
+  - 索引访问 `arr[idx]` 和索引赋值 `arr[idx] := value`。
+  - 数组类型声明 `array<int> arr;`。
 - **求值器**：
-  - 浮点数四则运算与比较，混合类型自动提升。
-  - 字符串拼接（`+` 支持字符串与整数/浮点混合）。
-  - 函数定义存储与调用（支持递归，返回值通过 `EvalError::Return` 传播）。
-  - 错误信息附加行列号（基于源码字节偏移计算）。
-- **REPL 增强**：
-  - 多行输入：行尾 `\` 续行，自动拼接并保留换行。
-  - 内置命令：`dump`（调用 `dump_env` 打印所有变量）。
-  - 解析错误美化（显示行列、期望 token）。
-- **图形界面**（`gui.rs`）：基于 `egui` 的简易 IDE（代码编辑器、运行按钮、输出区域、变量监视器），通过 `--gui` 参数启动。
-- **环境调试**：`Environment::dump_to_string()` 用于 GUI 变量显示。
+  - 实现数组字面量求值。
+  - 实现索引读取和索引赋值（含边界检查）。
+  - 修正 `and`/`or` 短路求值（之前错误地先计算右操作数，现已修正）。
+- **图形界面**：调整输出区域初始高度，优化布局。
 
 ### 修改
-- 重构 `Evaluator` 错误类型为 `EvalError`，区分 `Runtime` 和 `Return`。
-- 修正 `grammar.lalrpop` 中分号处理：移除 `Return` 规则内的显式分号，由 `StmtList` 统一消费。
-- 调整一元负号优先级，放入 `Factor` 规则，避免与减法冲突。
-- 修正除法优先级，移至 `Term` 规则（与乘法同级）。
-- 统一 `get_line_col` 函数，正确转换字节偏移为行列。
-- 修复 `for` 循环中更新语句的副作用（使用子求值器执行）。
-- 删除了 `Num` 规则，直接使用 `INT_NUM` 和 `FLOAT_NUM` token。
-- 调整 GUI 布局，使输出区域固定高度、可拖拽，编辑器自动填满剩余空间。
+- 重构 `grammar.lalrpop`，引入 `Primary`、`Postfix`、`Unary`、`MulExpr`、`AddExpr`、`RelExpr`、`LogicalExpr` 分层结构，消除所有歧义和冲突。
+- 调整 `Stmt::Assign` 为 `Assign(Box<Expr>, Box<Expr>)`，以支持任意左值。
+- 修正 `evaluator.rs` 中 `Opcode::And` 和 `Opcode::Or` 的求值顺序，确保短路行为。
+- 统一错误信息显示行列号，包含更友好的提示。
 
 ### 计划
-- 数组类型（`int[]`、索引访问、内置函数）。
+- 支持多维数组（当前仅一维）
 - 模块/导入系统（`import "file.comix"`）。
 - 内置函数库（`len`、`input`、类型转换等）。
 - 字节码虚拟机优化。

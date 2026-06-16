@@ -75,20 +75,47 @@ impl Evaluator {
 
     fn execute(&mut self, stmt: &Stmt) -> Result<Value, EvalError> {
         match stmt {
-            Stmt::Assign(var, expr) => {
-                let value = self.eval_expr(expr)?;
-                self.environment.borrow_mut().assign(var, value.clone())
-                    .map_err(EvalError::Runtime)?;
-                Ok(value)
+            Stmt::Assign(lhs, rhs) => {
+                let value = self.eval_expr(rhs)?;
+                match lhs.as_ref() {
+                    Expr::Id(name, ..) => {
+                        self.environment.borrow_mut().assign(name, value.clone())
+                            .map_err(EvalError::Runtime)?;
+                        Ok(value)
+                    }
+                    Expr::Index(arr_expr, idx_expr, ..) => {
+                        // 先求数组和索引
+                        let arr_val = self.eval_expr(arr_expr)?;
+                        let idx_val = self.eval_expr(idx_expr)?;
+                        let idx = idx_val.as_int()
+                            .ok_or_else(|| EvalError::Runtime("索引必须是整数".to_string()))?;
+                        // 获取数组的可变引用
+                        let mut arr = arr_val.as_array().ok_or_else(|| EvalError::Runtime("索引赋值需要数组".to_string()))?.clone();
+                        if idx < 0 || idx as usize >= arr.len() {
+                            return Err(EvalError::Runtime(format!("索引越界: 长度 {}，索引 {}", arr.len(), idx)));
+                        }
+                        arr[idx as usize] = value;
+                        // 写回环境（如果 arr_expr 是 Id）
+                        if let Expr::Id(var_name, ..) = arr_expr.as_ref() {
+                            self.environment.borrow_mut().assign(var_name, Value::Array(arr))
+                                .map_err(EvalError::Runtime)?;
+                            Ok(Value::Null)
+                        } else {
+                            Err(EvalError::Runtime("索引赋值暂不支持复杂左值".to_string()))
+                        }
+                    }
+                    _ => Err(EvalError::Runtime("赋值左侧必须是变量或索引".to_string())),
+                }
             }
 
             Stmt::VarDecl(vars, var_type) => {
                 for var in vars {
                     let default_value = match var_type {
                         Type::Int => Value::Int(0),
+                        Type::Float => Value::Float(0.0),
                         Type::Bool => Value::Bool(false),
                         Type::String => Value::String(String::new()),
-                        Type::Float => Value::Float(0.0),
+                        Type::Array(_) => Value::Array(vec![]),
                     };
                     self.environment.borrow_mut().define(var, default_value);
                 }
@@ -148,7 +175,7 @@ impl Evaluator {
                 );
 
                 let update_stmt = Stmt::Assign(
-                    var_name.clone(),
+                    Box::new(Expr::Id(var_name.clone(), 0, 0)),
                     Box::new(Expr::Op(
                         Opcode::Add,
                         Box::new(Expr::Id(var_name.clone(), 0, 0)),
@@ -164,7 +191,7 @@ impl Evaluator {
             }
 
             Stmt::FuncDef(name, params, ret_type, body, _start, _end) => {
-                self.functions.insert(name.clone(), (params.clone(), *ret_type, body.clone(), *_start, *_end));
+                self.functions.insert(name.clone(), (params.clone(), ret_type.clone(), body.clone(), *_start, *_end));
                 Ok(Value::Null)
             }
 
@@ -197,6 +224,25 @@ impl Evaluator {
             Expr::StringLit(s, _, _) => Ok(Value::String(s.clone())),
 
             Expr::BoolLit(b, _, _) => Ok(Value::Bool(*b)),
+
+            Expr::ArrayLit(elems, ..) => {
+                let mut values = Vec::new();
+                for e in elems {
+                    values.push(self.eval_expr(e)?);
+                }
+                Ok(Value::Array(values))
+            }
+
+            Expr::Index(arr_expr, idx_expr, ..) => {
+                let arr_val = self.eval_expr(arr_expr)?;
+                let idx_val = self.eval_expr(idx_expr)?;
+                let arr = arr_val.as_array().ok_or_else(|| EvalError::Runtime("索引操作需要数组".to_string()))?;
+                let idx = idx_val.as_int().ok_or_else(|| EvalError::Runtime("索引必须是整数".to_string()))?;
+                if idx < 0 || idx as usize >= arr.len() {
+                    return Err(EvalError::Runtime(format!("索引越界: 长度 {}，索引 {}", arr.len(), idx)));
+                }
+                Ok(arr[idx as usize].clone())
+            }
 
             Expr::Op(op, left, right) => {
                 match op {
