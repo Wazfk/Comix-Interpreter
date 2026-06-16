@@ -131,6 +131,10 @@ fn run_repl() -> Result<()> {
 }
 
 fn get_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let bytes = source.as_bytes();
+    if offset >= bytes.len() {
+        return (1, 1);
+    }
     let mut line = 1;
     let mut col = 1;
     for (byte_idx, byte) in source.as_bytes().iter().enumerate() {
@@ -180,6 +184,7 @@ pub fn parse_input(input: &str) -> Result<Vec<ast::Stmt>, String> {
 
 fn run_file(path: &str) -> Result<()> {
     let source = fs::read_to_string(path)?;
+    let source = source.trim_start_matches('\u{feff}').to_string();
     let env = Environment::new();
     let mut evaluator = Evaluator::new(env, source.clone());
 

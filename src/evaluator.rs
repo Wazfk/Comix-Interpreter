@@ -69,11 +69,6 @@ impl Evaluator {
         let mut result = Value::Null;
         for stmt in stmts {
             result = self.execute(stmt)?;
-            if let Stmt::Expr(_) = stmt {
-                if !result.is_null() {
-                    println!("{}", result);
-                }
-            }
         }
         Ok(result)
     }
@@ -140,7 +135,6 @@ impl Evaluator {
             Stmt::For(var_name, start_expr, end_expr, body) => {
                 let for_env = Environment::new_with_parent(self.environment.clone());
                 let start_val = self.eval_expr(start_expr)?;
-                // 允许起始值为整数（for 循环仍使用整数计数）
                 let start_int = start_val.as_int()
                     .ok_or_else(|| EvalError::Runtime("for 循环起始值必须是整数".to_string()))?;
                 for_env.borrow_mut().define(var_name, Value::Int(start_int));
@@ -205,160 +199,146 @@ impl Evaluator {
             Expr::BoolLit(b, _, _) => Ok(Value::Bool(*b)),
 
             Expr::Op(op, left, right) => {
-                let left_val = self.eval_expr(left)?;
-                let right_val = self.eval_expr(right)?;
-
                 match op {
-                    Opcode::Add => {
-                        // 整数加法优先
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Int(l_int + r_int))
-                        }
-                        // 浮点加法（包括混合）
-                        else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Float(lf + rf))
-                        }
-                        // 字符串拼接（保留原有逻辑）
-                        else if let Some(l_str) = left_val.as_string() {
-                            let r_str = right_val.as_string()
-                                .map(|s| s.clone())
-                                .or_else(|| right_val.as_int().map(|i| i.to_string()))
-                                .or_else(|| right_val.as_float().map(|f| f.to_string()))
-                                .ok_or_else(|| EvalError::Runtime("加法：右操作数无法转换为字符串".to_string()))?;
-                            Ok(Value::String(format!("{}{}", l_str, r_str)))
-                        }
-                        else if let Some(r_str) = right_val.as_string() {
-                            let l_str = left_val.as_int()
-                                .map(|i| i.to_string())
-                                .or_else(|| left_val.as_float().map(|f| f.to_string()))
-                                .ok_or_else(|| EvalError::Runtime("加法：左操作数无法转换为字符串".to_string()))?;
-                            Ok(Value::String(format!("{}{}", l_str, r_str)))
-                        }
-                        else {
-                            Err(EvalError::Runtime("加法需要数字或字符串操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::Sub => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Int(l_int - r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Float(lf - rf))
-                        } else {
-                            Err(EvalError::Runtime("减法需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::Mul => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Int(l_int * r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Float(lf * rf))
-                        } else {
-                            Err(EvalError::Runtime("乘法需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::Div => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            if r_int == 0 {
-                                return Err(EvalError::Runtime("除数不能为零".to_string()));
-                            }
-                            Ok(Value::Int(l_int / r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            if rf == 0.0 {
-                                return Err(EvalError::Runtime("除数不能为零".to_string()));
-                            }
-                            Ok(Value::Float(lf / rf))
-                        } else {
-                            Err(EvalError::Runtime("除法需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::GreaterThan => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int > r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf > rf))
-                        } else {
-                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::GreaterOrEqual => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int >= r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf >= rf))
-                        } else {
-                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::LessThan => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int < r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf < rf))
-                        } else {
-                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::LessOrEqual => {
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int <= r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf <= rf))
-                        } else {
-                            Err(EvalError::Runtime("比较需要数字操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::Equal => {
-                        // 先尝试整数，再浮点，再布尔，再字符串
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int == r_int))
-                        } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf == rf))
-                        } else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
-                            Ok(Value::Bool(l_bool == r_bool))
-                        } else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
-                            Ok(Value::Bool(l_str == r_str))
-                        } else {
-                            Err(EvalError::Runtime("相等比较需要相同类型的操作数".to_string()))
-                        }
-                    }
-
-                    Opcode::NotEqual => {
-                        // 先尝试整数，再浮点，再布尔，再字符串
-                        if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
-                            Ok(Value::Bool(l_int != r_int))
-                        }
-                        else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
-                            Ok(Value::Bool(lf != rf))
-                        }
-                        else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
-                            Ok(Value::Bool(l_bool != r_bool))
-                        }
-                        else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
-                            Ok(Value::Bool(l_str != r_str))
-                        }
-                        else {
-                            Err(EvalError::Runtime("不等比较需要相同类型的操作数".to_string()))
-                        }
-                    }
-
                     Opcode::And => {
-                        let l = left_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑与需要布尔操作数".to_string()))?;
-                        let r = right_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑与需要布尔操作数".to_string()))?;
-                        Ok(Value::Bool(l && r))
+                        let left_val = self.eval_expr(left)?;
+                        if !left_val.is_truthy() {
+                            return Ok(Value::Bool(false));
+                        }
+                        let right_val = self.eval_expr(right)?;
+                        Ok(Value::Bool(right_val.is_truthy()))
                     }
-
                     Opcode::Or => {
-                        let l = left_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑或需要布尔操作数".to_string()))?;
-                        let r = right_val.as_bool().ok_or_else(|| EvalError::Runtime("逻辑或需要布尔操作数".to_string()))?;
-                        Ok(Value::Bool(l || r))
+                        let left_val = self.eval_expr(left)?;
+                        if left_val.is_truthy() {
+                            return Ok(Value::Bool(true));
+                        }
+                        let right_val = self.eval_expr(right)?;
+                        Ok(Value::Bool(right_val.is_truthy()))
+                    }
+                    _ => {
+                        let left_val = self.eval_expr(left)?;
+                        let right_val = self.eval_expr(right)?;
+                        match op {
+                            Opcode::Add => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Int(l_int + r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Float(lf + rf))
+                                } else if let Some(l_str) = left_val.as_string() {
+                                    let r_str = right_val.as_string()
+                                        .map(|s| s.clone())
+                                        .or_else(|| right_val.as_int().map(|i| i.to_string()))
+                                        .or_else(|| right_val.as_float().map(|f| f.to_string()))
+                                        .ok_or_else(|| EvalError::Runtime("加法：右操作数无法转换为字符串".to_string()))?;
+                                    Ok(Value::String(format!("{}{}", l_str, r_str)))
+                                } else if let Some(r_str) = right_val.as_string() {
+                                    let l_str = left_val.as_int()
+                                        .map(|i| i.to_string())
+                                        .or_else(|| left_val.as_float().map(|f| f.to_string()))
+                                        .ok_or_else(|| EvalError::Runtime("加法：左操作数无法转换为字符串".to_string()))?;
+                                    Ok(Value::String(format!("{}{}", l_str, r_str)))
+                                } else {
+                                    Err(EvalError::Runtime("加法需要数字或字符串操作数".to_string()))
+                                }
+                            }
+                            Opcode::Sub => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Int(l_int - r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Float(lf - rf))
+                                } else {
+                                    Err(EvalError::Runtime("减法需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::Mul => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Int(l_int * r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Float(lf * rf))
+                                } else {
+                                    Err(EvalError::Runtime("乘法需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::Div => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    if r_int == 0 {
+                                        return Err(EvalError::Runtime("除数不能为零".to_string()));
+                                    }
+                                    Ok(Value::Int(l_int / r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    if rf == 0.0 {
+                                        return Err(EvalError::Runtime("除数不能为零".to_string()));
+                                    }
+                                    Ok(Value::Float(lf / rf))
+                                } else {
+                                    Err(EvalError::Runtime("除法需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::GreaterThan => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int > r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf > rf))
+                                } else {
+                                    Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::GreaterOrEqual => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int >= r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf >= rf))
+                                } else {
+                                    Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::LessThan => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int < r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf < rf))
+                                } else {
+                                    Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::LessOrEqual => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int <= r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf <= rf))
+                                } else {
+                                    Err(EvalError::Runtime("比较需要数字操作数".to_string()))
+                                }
+                            }
+                            Opcode::Equal => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int == r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf == rf))
+                                } else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
+                                    Ok(Value::Bool(l_bool == r_bool))
+                                } else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
+                                    Ok(Value::Bool(l_str == r_str))
+                                } else {
+                                    Err(EvalError::Runtime("相等比较需要相同类型的操作数".to_string()))
+                                }
+                            }
+                            Opcode::NotEqual => {
+                                if let (Some(l_int), Some(r_int)) = (left_val.as_int(), right_val.as_int()) {
+                                    Ok(Value::Bool(l_int != r_int))
+                                } else if let (Some(lf), Some(rf)) = (left_val.as_float(), right_val.as_float()) {
+                                    Ok(Value::Bool(lf != rf))
+                                } else if let (Some(l_bool), Some(r_bool)) = (left_val.as_bool(), right_val.as_bool()) {
+                                    Ok(Value::Bool(l_bool != r_bool))
+                                } else if let (Some(l_str), Some(r_str)) = (left_val.as_string(), right_val.as_string()) {
+                                    Ok(Value::Bool(l_str != r_str))
+                                } else {
+                                    Err(EvalError::Runtime("不等比较需要相同类型的操作数".to_string()))
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
                     }
                 }
             }
