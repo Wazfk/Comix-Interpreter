@@ -398,34 +398,49 @@ impl Evaluator {
             }
 
             Expr::Call(func_name, args, _start, _end) => {
-                let (params, _ret_type, body, ..) = self.functions.get(func_name)
-                    .ok_or_else(|| EvalError::Runtime(format!("函数 '{}' 未定义", func_name)))?;
-
-                if args.len() != params.len() {
-                    return Err(EvalError::Runtime(format!("函数 '{}' 需要 {} 个参数，提供了 {} 个",
-                        func_name, params.len(), args.len())));
-                }
-
-                let mut arg_values = Vec::new();
-                for arg in args {
-                    arg_values.push(self.eval_expr(arg)?);
-                }
-
-                let func_env = Environment::new_with_parent(self.environment.clone());
-                {
-                    let mut env_ref = func_env.borrow_mut();
-                    for ((param_name, _param_type), arg_val) in params.iter().zip(arg_values) {
-                        env_ref.define(param_name, arg_val);
+                // 内置函数 len
+                if func_name == "len" {
+                    if args.len() != 1 {
+                        return Err(EvalError::Runtime("len 需要 1 个参数".to_string()));
                     }
-                }
-
-                let mut child_eval = Evaluator::new(func_env, self.source.clone());
-                child_eval.functions = self.functions.clone();
-
-                match child_eval.evaluate(body) {
-                    Ok(v) => Ok(v),
-                    Err(EvalError::Return(v)) => Ok(v),
-                    Err(e) => Err(e),
+                    let arg = self.eval_expr(&args[0])?;
+                    match arg {
+                        Value::Array(v) => Ok(Value::Int(v.len() as i64)),
+                        Value::String(s) => Ok(Value::Int(s.len() as i64)),
+                        _ => Err(EvalError::Runtime("len 只支持数组或字符串".to_string())),
+                    }
+                } else {
+                    // 用户自定义函数
+                    let (params, _ret_type, body, ..) = self.functions.get(func_name)
+                        .ok_or_else(|| EvalError::Runtime(format!("函数 '{}' 未定义", func_name)))?;
+            
+                    if args.len() != params.len() {
+                        return Err(EvalError::Runtime(format!("函数 '{}' 需要 {} 个参数，提供了 {} 个",
+                            func_name, params.len(), args.len())));
+                    }
+            
+                    let mut arg_values = Vec::new();
+                    for arg in args {
+                        arg_values.push(self.eval_expr(arg)?);
+                    }
+            
+                    let func_env = Environment::new_with_parent(self.environment.clone());
+                    {
+                        let mut env_ref = func_env.borrow_mut();
+                        for ((param_name, _param_type), arg_val) in params.iter().zip(arg_values) {
+                            env_ref.define(param_name, arg_val);
+                        }
+                    }
+            
+                    // 如果之前实现了输出重定向，此处传递 self.output.clone()
+                    let mut child_eval = Evaluator::new(func_env, self.source.clone() /* , self.output.clone() */);
+                    child_eval.functions = self.functions.clone();
+            
+                    match child_eval.evaluate(body) {
+                        Ok(v) => Ok(v),
+                        Err(EvalError::Return(v)) => Ok(v),
+                        Err(e) => Err(e),
+                    }
                 }
             }
 
