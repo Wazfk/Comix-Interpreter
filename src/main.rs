@@ -44,11 +44,53 @@ fn run_gui() {
     eframe::run_native(
         "Comix IDE",
         options,
-        Box::new(move |_cc: &CreationContext<'_>| {
+        Box::new(move |cc: &CreationContext<'_>| {
+            // 加载中文字体
+            setup_chinese_font(&cc.egui_ctx);
             Ok(Box::new(ComixApp::new(env, String::new())) as Box<dyn eframe::App>)
         }),
     )
     .unwrap();
+}
+
+/// 尝试加载系统中文字体以支持中文显示
+fn setup_chinese_font(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Windows 系统常用中文字体路径列表
+    let font_paths = [
+        "C:\\Windows\\Fonts\\msyh.ttc",   // 微软雅黑
+        "C:\\Windows\\Fonts\\msyh.ttf",
+        "C:\\Windows\\Fonts\\simsun.ttc", // 宋体
+        "C:\\Windows\\Fonts\\simhei.ttf", // 黑体
+    ];
+
+    let mut loaded = false;
+    for path in &font_paths {
+        if let Ok(bytes) = std::fs::read(path) {
+            fonts.font_data.insert(
+                "chinese_font".to_owned(),
+                egui::FontData::from_owned(bytes),
+            );
+            // 将中文字体作为首选 Proportional 和 Monospace 字体的后备
+            fonts.families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .push("chinese_font".to_owned());
+            fonts.families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push("chinese_font".to_owned());
+            loaded = true;
+            break;
+        }
+    }
+
+    if !loaded {
+        eprintln!("警告: 未找到系统中文字体，中文可能无法正常显示");
+    }
+
+    ctx.set_fonts(fonts);
 }
 
 fn run_repl() -> Result<()> {
@@ -117,6 +159,8 @@ fn run_repl() -> Result<()> {
         match parse_input(&source) {
             Ok(ast) => match evaluator.evaluate(&ast) {
                 Ok(value) => {
+                    // 打印 evaluator 捕获的输出
+                    print!("{}", evaluator.output);
                     if !value.is_null() {
                         println!("{}", value);
                     }
@@ -191,6 +235,8 @@ fn run_file(path: &str) -> Result<()> {
     match parse_input(&source) {
         Ok(ast) => match evaluator.evaluate(&ast) {
             Ok(value) => {
+                // 打印 evaluator 捕获的输出
+                print!("{}", evaluator.output);
                 if !value.is_null() {
                     println!("{}", value);
                 }

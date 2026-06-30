@@ -24,23 +24,30 @@ impl ComixApp {
 
     fn run_code(&mut self) {
         self.output.clear();
+        self.evaluator.clear_output();
         self.evaluator.set_source(self.source.clone());
 
         match parse_input(&self.source) {
             Ok(stmts) => {
                 match self.evaluator.evaluate(&stmts) {
-                    Ok(_) => {
-                        self.output.push_str("Execution completed.\n");
-                        let mut var_str = String::new();
-                        self.evaluator.dump_env_to_string(&mut var_str);
-                        if !var_str.is_empty() {
-                            self.output.push_str(&format!("Variables:\n{}", var_str));
+                    Ok(value) => {
+                        // 显示 evaluator 捕获的输出（print 语句等）
+                        self.output.push_str(&self.evaluator.output);
+                        // 显示最后一个表达式的值
+                        if !value.is_null() {
+                            self.output.push_str(&format!("=> {}\n", value));
+                        }
+                        if self.output.is_empty() {
+                            self.output.push_str("Execution completed.\n");
                         }
                     }
                     Err(EvalError::Runtime(msg)) => {
+                        // 错误前的部分输出也应该显示
+                        self.output.push_str(&self.evaluator.output);
                         self.output.push_str(&format!("Runtime error: {}\n", msg));
                     }
                     Err(EvalError::Return(v)) => {
+                        self.output.push_str(&self.evaluator.output);
                         self.output.push_str(&format!("Function returned: {}\n", v));
                     }
                 }

@@ -50,6 +50,7 @@ pub struct Evaluator {
     environment: Rc<RefCell<Environment>>,
     source: String,
     functions: HashMap<String, (ParamList, Type, FuncBody, usize, usize)>,
+    pub output: String,
 }
 
 impl Evaluator {
@@ -58,11 +59,16 @@ impl Evaluator {
             environment,
             source,
             functions: HashMap::new(),
+            output: String::new(),
         }
     }
 
     pub fn set_source(&mut self, source: String) {
         self.source = source;
+    }
+
+    pub fn clear_output(&mut self) {
+        self.output.clear();
     }
 
     pub fn evaluate(&mut self, stmts: &[Stmt]) -> Result<Value, EvalError> {
@@ -151,12 +157,14 @@ impl Evaluator {
                 let new_env = Environment::new_with_parent(self.environment.clone());
                 let mut block_eval = Evaluator::new(new_env, self.source.clone());
                 block_eval.functions = self.functions.clone();
-                block_eval.evaluate(stmts)
+                let result = block_eval.evaluate(stmts);
+                self.output.push_str(&block_eval.output);
+                result
             }
 
             Stmt::Print(expr) => {
                 let value = self.eval_expr(expr)?;
-                println!("{}", value);
+                self.output.push_str(&format!("{}\n", value));
                 Ok(Value::Null)
             }
 
@@ -189,6 +197,7 @@ impl Evaluator {
                     child_eval.evaluate(body)?;
                     child_eval.execute(&update_stmt)?;
                 }
+                self.output.push_str(&child_eval.output);
                 Ok(Value::Null)
             }
 
@@ -207,7 +216,7 @@ impl Evaluator {
         }
     }
 
-    fn eval_expr(&self, expr: &Expr) -> Result<Value, EvalError> {
+    fn eval_expr(&mut self, expr: &Expr) -> Result<Value, EvalError> {
         match expr {
             Expr::Id(name, start, _) => {
                 let value = self.environment.borrow()
@@ -410,9 +419,12 @@ impl Evaluator {
                         _ => Err(EvalError::Runtime("len 只支持数组或字符串".to_string())),
                     }
                 } else {
-                    // 用户自定义函数
-                    let (params, _ret_type, body, ..) = self.functions.get(func_name)
-                        .ok_or_else(|| EvalError::Runtime(format!("函数 '{}' 未定义", func_name)))?;
+                    // 用户自定义函数 —— 先 clone 出函数数据，避免借用冲突
+                    let (params, _ret_type, body) = {
+                        let (p, r, b, ..) = self.functions.get(func_name)
+                            .ok_or_else(|| EvalError::Runtime(format!("函数 '{}' 未定义", func_name)))?;
+                        (p.clone(), r.clone(), b.clone())
+                    };
             
                     if args.len() != params.len() {
                         return Err(EvalError::Runtime(format!("函数 '{}' 需要 {} 个参数，提供了 {} 个",
@@ -432,15 +444,16 @@ impl Evaluator {
                         }
                     }
             
-                    // 如果之前实现了输出重定向，此处传递 self.output.clone()
-                    let mut child_eval = Evaluator::new(func_env, self.source.clone() /* , self.output.clone() */);
+                    let mut child_eval = Evaluator::new(func_env, self.source.clone());
                     child_eval.functions = self.functions.clone();
             
-                    match child_eval.evaluate(body) {
+                    let result = match child_eval.evaluate(&body) {
                         Ok(v) => Ok(v),
                         Err(EvalError::Return(v)) => Ok(v),
                         Err(e) => Err(e),
-                    }
+                    };
+                    self.output.push_str(&child_eval.output);
+                    result
                 }
             }
 
